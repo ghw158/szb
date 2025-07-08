@@ -74,6 +74,11 @@ mother_s_template = None
 # 法术
 snake_god_rage = None
 
+# 先后手
+first_template = None
+# second_template = None
+if_first = True
+
 
 def show_tkinter_notification(title, message):
     """使用Tkinter显示通知"""
@@ -168,12 +173,12 @@ def load_all_template():
     global guard_template
     if guard_template is None:
         guard_img = load_template(TEMPLATES_DIR, 'guard.png')
-        guard_template = create_template_info(guard_img, "守护", threshold=0.3)
+        guard_template = create_template_info(guard_img, "守护", threshold=0.28)
 
     global super_guard_template
     if super_guard_template is None:
         super_guard_img = load_template(TEMPLATES_DIR, 'super_guard.png')
-        super_guard_template = create_template_info(super_guard_img, "超进化守护", threshold=0.53)
+        super_guard_template = create_template_info(super_guard_img, "超进化守护", threshold=0.5)
 
     global father_s_template
     if father_s_template is None:
@@ -188,13 +193,13 @@ def load_all_template():
     global father_h_template
     if father_h_template is None:
         father_h_img = load_template(TEMPLATES_DIR, '543_h.png')
-        father_h_template = create_template_info(father_h_img, "手牌狼哥", threshold=0.6)
+        father_h_template = create_template_info(father_h_img, "手牌狼哥", threshold=0.7)
 
 
     global mother_h_template
     if mother_h_template is None:
         mother_h_img = load_template(TEMPLATES_DIR, '233_h.png')
-        mother_h_template = create_template_info(mother_h_img, "手牌233", threshold=0.6)
+        mother_h_template = create_template_info(mother_h_img, "手牌233", threshold=0.7)
 
     global father_f_template
     if father_f_template is None:
@@ -210,6 +215,16 @@ def load_all_template():
     if snake_god_rage is None:
         snake_god_rage_img = load_template(TEMPLATES_DIR, 'snake_god_rage.png')
         snake_god_rage = create_template_info(snake_god_rage_img, "蛇神之怒", threshold=0.6)
+
+    global first_template
+    if first_template is None:
+        first_template_img = load_template(TEMPLATES_DIR, 'first.png')
+        first_template = create_template_info(first_template_img, "先手", threshold=0.95)
+
+    # global second_template
+    # if second_template is None:
+    #     second_template_img = load_template(TEMPLATES_DIR, 'second.png')
+    #     second_template = create_template_info(second_template_img, "后手", threshold=0.85)
 
 
 
@@ -566,16 +581,34 @@ def detect_super_evolution_button(gray_screenshot):
 
 def start_hands(device):
     global father_s_template, mother_s_template
+    global if_first
     xlist = []
     screenshot = take_screenshot()
     screenshot_np = np.array(screenshot)
     screenshot_cv = cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
     gray_screenshot = cv2.cvtColor(screenshot_cv, cv2.COLOR_BGR2GRAY)
 
+    # 裁剪指定区域
+    x1, y1, x2, y2 = 1060, 560, 1250, 675
+    region = gray_screenshot[y1:y2, x1:x2]
+
+    # 模板匹配
+    res = cv2.matchTemplate(region, first_template['template'], cv2.TM_CCOEFF_NORMED)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+    logger.info(max_val)
+
+    if max_val >= first_template['threshold']:
+        if_first = True
+        logger.info("你是先手")
+    else:
+        if_first = False
+        logger.info("你是后手")
+
     all_boxes = []
     all_scores = []
 
     if father_s_template:
+        
         result = cv2.matchTemplate(gray_screenshot, father_s_template['template'], cv2.TM_CCOEFF_NORMED)
         loc = np.where(result >= father_s_template['threshold'])
         for pt in zip(*loc[::-1]):
@@ -645,7 +678,7 @@ def if_father(device):
         curved_drag(device, center_x, center_y, center_x, 200, 0.04)
         time.sleep(0.1)
     time.sleep(0.1)
-    device.click(976, 675)
+    # device.click(976, 675)
 
 
 def evolution_father(follower_positions):
@@ -704,6 +737,8 @@ def detect_spell(list):
 
     for del_center in xlist:
         list = [x for x in list if abs(x - del_center) >= 50]
+    if len(list) != 0:
+        logger.info("检测到法术")
 
     return list
 
@@ -719,7 +754,7 @@ def use_spell(device):
         center_x = max_loc[0] + snake_god_rage['w'] // 2
         center_y = max_loc[1] + snake_god_rage['h'] // 2
         curved_drag(device, center_x, center_y, center_x, 200, 0.04)
-        time.sleep(0.3)
+        time.sleep(0.5)
         device.click(645, 63)
         time.sleep(1)
         device.click(976, 679)
@@ -1005,7 +1040,7 @@ def perform_full_actions(device):
     # 5次出牌拖拽（使用弧线）
     start_y = 672
     end_y = 400
-    duration = 0.04
+    duration = 0.1
     drag_points_x = [405, 551, 684, 830, 959]
 
     # drag_points_x = detect_spell(drag_points_x)
@@ -1077,7 +1112,7 @@ def perform_fullS_actions(device):
     # 5次出牌拖拽（使用弧线）
     start_y = 672
     end_y = 400
-    duration = 0.04
+    duration = 0.1
     drag_points_x = [405, 551, 684, 830, 959]
 
     # drag_points_x = detect_spell(drag_points_x)
@@ -1241,6 +1276,7 @@ def main():
     global script_running, script_paused, pause_logged
     global current_round_count, match_start_time, current_run_matches, current_run_start_time
     global in_match, evolution_template, super_evolution_template
+    global if_first
     has_swapped_hands = False
 
     # 初始化进化模板
@@ -1385,6 +1421,7 @@ def main():
                     if key == 'war':
                         # 检测到"决斗"按钮，表示新对战开始
                         has_swapped_hands = False   # 重置换牌标志
+                        if_first = True     # 重置先后手标志
                         if in_match:
                             # 如果已经在战斗中，先结束当前对战
                             end_current_match()
@@ -1395,12 +1432,25 @@ def main():
                         in_match = True
                         logger.info("检测到新对战开始")
 
-                    elif key == 'end_round' and in_match:
+                    elif key == 'end_round' and in_match and if_first:
                         # 检测到"结束回合"按钮，增加回合计数
-                        if current_round_count in (4, 5, 6):  # 第4 ，5，6回合
+                        if current_round_count in (5, 6):  # 第5，6回合
                             logger.info(f"第{current_round_count}回合，执行进化")
                             perform_fullS_actions(device)
                         elif current_round_count in (7, 8, 9):  # 第7,8,9回合
+                            logger.info(f"第{current_round_count}回合，执行超进化")
+                            perform_fullPlus_actions(device)
+                        else:  # 其他回合
+                            logger.info(f"第{current_round_count}回合，执行正常操作")
+                            perform_full_actions(device)
+                        current_round_count += 1
+
+                    elif key == 'end_round' and in_match and not if_first:
+                        # 检测到"结束回合"按钮，增加回合计数
+                        if current_round_count in (4, 5):  # 第4 ，5回合
+                            logger.info(f"第{current_round_count}回合，执行进化")
+                            perform_fullS_actions(device)
+                        elif current_round_count in (6, 7, 8):  # 第6,7,8回合
                             logger.info(f"第{current_round_count}回合，执行超进化")
                             perform_fullPlus_actions(device)
                         else:  # 其他回合
